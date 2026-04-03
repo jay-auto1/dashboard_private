@@ -231,11 +231,17 @@ tbody td:first-child { text-align: left; font-family: 'Noto Sans KR', sans-serif
   </div>
 </div>
 
-<div class="filter-row" id="productFilterRow">
-  <span class="filter-label">제품</span>
-  <div class="tab-group" id="productTabs">
-    <button class="tab active" data-product="all" onclick="setProduct(this)"><span class="dot" style="background:var(--text);opacity:.25"></span>전체</button>
-  </div>
+<div class="filter-row" id="productRowMain">
+  <span class="filter-label" style="color:#4f8ef7">메인제품</span>
+  <div class="tab-group" id="productTabsMain"></div>
+</div>
+<div class="filter-row" id="productRowEtc">
+  <span class="filter-label" style="color:#1D9E75">기타제품</span>
+  <div class="tab-group" id="productTabsEtc"></div>
+</div>
+<div class="filter-row" id="productRowCommon">
+  <span class="filter-label" style="color:#888780">공통(미분류)</span>
+  <div class="tab-group" id="productTabsCommon"></div>
 </div>
 
 </div><!-- /sticky-filters -->
@@ -557,9 +563,20 @@ function applyAimban(apiData, dateFrom, dateTo) {
   // 제품 필터 적용
   var rows = apiData._rawNSA || [];
   var filteredRows;
+  var GROUP_KEY_MAP = {'main': '메인제품', 'etc': '기타제품', 'common': null};
   if (S.productGroup) {
-    var groupProds = PRODUCT_GROUPS[S.productGroup] || [];
-    filteredRows = rows.filter(function(r){ return groupProds.indexOf((r['제품']||'').trim()) !== -1; });
+    var groupLabel = GROUP_KEY_MAP[S.productGroup];
+    if (S.productGroup === 'common') {
+      // 공통: PRODUCT_GROUPS['공통'] + 미분류
+      var allGrouped = PRODUCT_GROUPS['메인제품'].concat(PRODUCT_GROUPS['기타제품']).concat(PRODUCT_GROUPS['공통']);
+      filteredRows = rows.filter(function(r){
+        var p = (r['제품']||'').trim();
+        return PRODUCT_GROUPS['공통'].indexOf(p) !== -1 || allGrouped.indexOf(p) === -1;
+      });
+    } else {
+      var groupProds = PRODUCT_GROUPS[groupLabel] || [];
+      filteredRows = rows.filter(function(r){ return groupProds.indexOf((r['제품']||'').trim()) !== -1; });
+    }
   } else if (S.product === 'all') {
     filteredRows = rows;
   } else {
@@ -1953,6 +1970,7 @@ function setProduct(btn) {
   S.productGroup = '';
   campaignCache = {};
   sheetsCache.aimban && (sheetsCache.aimban._filteredNSA = null);
+  syncProductTabActive();
   renderWithData();
 }
 
@@ -1964,72 +1982,74 @@ var PRODUCT_GROUPS = {
 };
 var PRODUCT_GROUP_COLORS = {'메인제품': '#4f8ef7', '기타제품': '#1D9E75', '공통': '#888780'};
 
-// 제품 탭 동적 생성
+// 현재 선택된 제품 그룹
+var S_productGroup = ''; // 'main' | 'etc' | 'common' | ''
+
+// 제품 탭 동적 생성 (3개 행으로 분리)
 function buildProductTabs(rows) {
   var products = {};
   for (var i = 0; i < rows.length; i++) {
     var p = (rows[i]['제품'] || '').trim();
     if (p) products[p] = true;
   }
-  var allProducts = Object.keys(products).sort();
 
-  var html = '<button class="tab active" data-product="all" onclick="setProduct(this)"><span class="dot" style="background:var(--text);opacity:.25"></span>전체</button>';
-
-  // 그룹별로 묶어서 출력
-  var groupNames = Object.keys(PRODUCT_GROUPS);
-  for (var gi = 0; gi < groupNames.length; gi++) {
-    var groupName = groupNames[gi];
-    var groupColor = PRODUCT_GROUP_COLORS[groupName] || '#888';
-    var groupProds = PRODUCT_GROUPS[groupName].filter(function(p){ return products[p]; });
-    if (groupProds.length === 0) continue;
-
-    // 그룹 구분선 + 레이블
-    html += '<span style="display:inline-flex;align-items:center;margin:0 6px;font-size:10px;color:var(--muted);letter-spacing:.5px;white-space:nowrap;border-left:1px solid var(--border2);padding-left:10px">' + groupName + '</span>';
-
-    // 그룹 버튼
-    html += '<button class="tab" data-product="__group__' + groupName + '" data-group="' + groupName + '" onclick="setProductGroup(this, this.dataset.group)" style="border-color:' + groupColor + ';color:' + groupColor + '">';
-    html += '<span class="dot" style="background:' + groupColor + ';opacity:.5"></span>전체</button>';
-
-    for (var pi = 0; pi < groupProds.length; pi++) {
-      html += '<button class="tab" data-product="' + groupProds[pi] + '" onclick="setProduct(this)">';
-      html += '<span class="dot" style="background:' + groupColor + '"></span>' + groupProds[pi] + '</button>';
+  function makeTabHtml(prods, color, groupKey) {
+    var html = '<button class="tab" data-group="' + groupKey + '" data-product="__all__' + groupKey + '" onclick="setProductGroupAll(this)">'
+      + '<span class="dot" style="background:' + color + ';opacity:.4"></span>전체</button>';
+    for (var i = 0; i < prods.length; i++) {
+      if (!products[prods[i]]) continue;
+      html += '<button class="tab" data-group="' + groupKey + '" data-product="' + prods[i] + '" onclick="setProduct(this)">'
+        + '<span class="dot" style="background:' + color + '"></span>' + prods[i] + '</button>';
     }
+    return html;
   }
 
-  // 그룹에 없는 제품 (공통 등)
-  var ungrouped = allProducts.filter(function(p) {
-    for (var gi = 0; gi < groupNames.length; gi++) {
-      if (PRODUCT_GROUPS[groupNames[gi]].indexOf(p) !== -1) return false;
-    }
-    return true;
-  });
-  if (ungrouped.length > 0) {
-    html += '<span style="display:inline-flex;align-items:center;margin:0 6px;font-size:10px;color:var(--muted);letter-spacing:.5px;white-space:nowrap;border-left:1px solid var(--border2);padding-left:10px">미분류</span>';
-    for (var ui = 0; ui < ungrouped.length; ui++) {
-      html += '<button class="tab" data-product="' + ungrouped[ui] + '" onclick="setProduct(this)">';
-      html += '<span class="dot" style="background:#888780"></span>' + ungrouped[ui] + '</button>';
-    }
+  var mainEl    = document.getElementById('productTabsMain');
+  var etcEl     = document.getElementById('productTabsEtc');
+  var commonEl  = document.getElementById('productTabsCommon');
+
+  if (mainEl)   mainEl.innerHTML   = makeTabHtml(PRODUCT_GROUPS['메인제품'], '#4f8ef7', 'main');
+  if (etcEl)    etcEl.innerHTML    = makeTabHtml(PRODUCT_GROUPS['기타제품'], '#1D9E75', 'etc');
+  if (commonEl) {
+    // 공통 + 그룹에 없는 것도 공통 행에 표시
+    var commonProds = PRODUCT_GROUPS['공통'].slice();
+    var allGrouped = PRODUCT_GROUPS['메인제품'].concat(PRODUCT_GROUPS['기타제품']).concat(PRODUCT_GROUPS['공통']);
+    Object.keys(products).forEach(function(p) {
+      if (allGrouped.indexOf(p) === -1) commonProds.push(p);
+    });
+    commonEl.innerHTML = makeTabHtml(commonProds, '#888780', 'common');
   }
 
-  document.getElementById('productTabs').innerHTML = html;
-
-  // 현재 선택 유지
-  var tabs = document.querySelectorAll('#productTabs .tab');
-  for (var i = 0; i < tabs.length; i++) {
-    var dp = tabs[i].getAttribute('data-product');
-    tabs[i].classList.toggle('active', dp === S.product || dp === '__group__' + S.productGroup);
-  }
+  // 전체 선택 상태 초기화 (아무것도 선택 안 된 상태 = 전체)
+  syncProductTabActive();
 }
 
-// 그룹 전체 선택
-function setProductGroup(btn, groupName) {
-  var tabs = document.querySelectorAll('#productTabs .tab');
-  for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
-  btn.classList.add('active');
+function syncProductTabActive() {
+  ['productTabsMain','productTabsEtc','productTabsCommon'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var tabs = el.querySelectorAll('.tab');
+    for (var i = 0; i < tabs.length; i++) {
+      var dp = tabs[i].getAttribute('data-product');
+      var dg = tabs[i].getAttribute('data-group');
+      var isAllBtn = dp && dp.indexOf('__all__') === 0;
+      if (isAllBtn) {
+        tabs[i].classList.toggle('active', S.product === 'all' && S.productGroup === dg);
+      } else {
+        tabs[i].classList.toggle('active', S.product === dp);
+      }
+    }
+  });
+}
+
+// 그룹 전체 버튼
+function setProductGroupAll(btn) {
+  var groupKey = btn.getAttribute('data-group');
   S.product = 'all';
-  S.productGroup = groupName;
+  S.productGroup = groupKey;
   campaignCache = {};
   sheetsCache.aimban && (sheetsCache.aimban._filteredNSA = null);
+  syncProductTabActive();
   renderWithData();
 }
 function setCh(btn) {
