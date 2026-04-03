@@ -556,7 +556,15 @@ function applyAimban(apiData, dateFrom, dateTo) {
   var CHS_AIMBAN = ['nsa', 'nbsa', 'ngfa', 'kakao'];
   // 제품 필터 적용
   var rows = apiData._rawNSA || [];
-  var filteredRows = S.product === 'all' ? rows : rows.filter(function(r){ return (r['제품']||'').trim() === S.product; });
+  var filteredRows;
+  if (S.productGroup) {
+    var groupProds = PRODUCT_GROUPS[S.productGroup] || [];
+    filteredRows = rows.filter(function(r){ return groupProds.indexOf((r['제품']||'').trim()) !== -1; });
+  } else if (S.product === 'all') {
+    filteredRows = rows;
+  } else {
+    filteredRows = rows.filter(function(r){ return (r['제품']||'').trim() === S.product; });
+  }
 
   // 필터된 rows로 byDate 재집계
   function aggregateByType(frows) {
@@ -657,7 +665,7 @@ function togglePrevWeek() {
   var cm = sumData(bk, ck, RAW);
   renderChart(cm, ck);
 }
-var S = {brand: 'aimban', sub: 'all', ch: ['all'], product: 'all'};
+var S = {brand: 'aimban', sub: 'all', ch: ['all'], product: 'all', productGroup: ''};
 
 var DAYS = []; // 차트용 날짜 배열 (renderChart에서 동적 생성)
 var MULTS = {}; // 더 이상 사용하지 않음
@@ -1942,10 +1950,19 @@ function setProduct(btn) {
   for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
   btn.classList.add('active');
   S.product = btn.getAttribute('data-product');
+  S.productGroup = '';
   campaignCache = {};
   sheetsCache.aimban && (sheetsCache.aimban._filteredNSA = null);
   renderWithData();
 }
+
+// 제품 그룹 정의 ← 여기서 수정하세요
+var PRODUCT_GROUPS = {
+  '메인제품': ['헤드레스트', '핸들커버', '방석', '킥매트', '허리쿠션', '프리백커버'],
+  '기타제품': ['대시보드커버', '데스크매트', '라나매트', '루미락', '모네틱', '사운드픽셀', '심포라', '전자기기', '하이퍼젯'],
+  '공통': ['공통']
+};
+var PRODUCT_GROUP_COLORS = {'메인제품': '#4f8ef7', '기타제품': '#1D9E75', '공통': '#888780'};
 
 // 제품 탭 동적 생성
 function buildProductTabs(rows) {
@@ -1954,23 +1971,66 @@ function buildProductTabs(rows) {
     var p = (rows[i]['제품'] || '').trim();
     if (p) products[p] = true;
   }
-  var sorted = Object.keys(products).sort();
-  var PRODUCT_COLORS = ['#4f8ef7','#1D9E75','#f4a044','#D85A30','#a78bfa','#D4537E','#00b4d8','#639922','#E24B4A','#BA7517'];
+  var allProducts = Object.keys(products).sort();
+
   var html = '<button class="tab active" data-product="all" onclick="setProduct(this)"><span class="dot" style="background:var(--text);opacity:.25"></span>전체</button>';
-  for (var i = 0; i < sorted.length; i++) {
-    var color = PRODUCT_COLORS[i % PRODUCT_COLORS.length];
-    html += '<button class="tab" data-product="' + sorted[i] + '" onclick="setProduct(this)"><span class="dot" style="background:' + color + '"></span>' + sorted[i] + '</button>';
+
+  // 그룹별로 묶어서 출력
+  var groupNames = Object.keys(PRODUCT_GROUPS);
+  for (var gi = 0; gi < groupNames.length; gi++) {
+    var groupName = groupNames[gi];
+    var groupColor = PRODUCT_GROUP_COLORS[groupName] || '#888';
+    var groupProds = PRODUCT_GROUPS[groupName].filter(function(p){ return products[p]; });
+    if (groupProds.length === 0) continue;
+
+    // 그룹 구분선 + 레이블
+    html += '<span style="display:inline-flex;align-items:center;margin:0 6px;font-size:10px;color:var(--muted);letter-spacing:.5px;white-space:nowrap;border-left:1px solid var(--border2);padding-left:10px">' + groupName + '</span>';
+
+    // 그룹 버튼
+    html += '<button class="tab" data-product="__group__' + groupName + '" data-group="' + groupName + '" onclick="setProductGroup(this, this.dataset.group)" style="border-color:' + groupColor + ';color:' + groupColor + '">';
+    html += '<span class="dot" style="background:' + groupColor + ';opacity:.5"></span>전체</button>';
+
+    for (var pi = 0; pi < groupProds.length; pi++) {
+      html += '<button class="tab" data-product="' + groupProds[pi] + '" onclick="setProduct(this)">';
+      html += '<span class="dot" style="background:' + groupColor + '"></span>' + groupProds[pi] + '</button>';
+    }
   }
+
+  // 그룹에 없는 제품 (공통 등)
+  var ungrouped = allProducts.filter(function(p) {
+    for (var gi = 0; gi < groupNames.length; gi++) {
+      if (PRODUCT_GROUPS[groupNames[gi]].indexOf(p) !== -1) return false;
+    }
+    return true;
+  });
+  if (ungrouped.length > 0) {
+    html += '<span style="display:inline-flex;align-items:center;margin:0 6px;font-size:10px;color:var(--muted);letter-spacing:.5px;white-space:nowrap;border-left:1px solid var(--border2);padding-left:10px">미분류</span>';
+    for (var ui = 0; ui < ungrouped.length; ui++) {
+      html += '<button class="tab" data-product="' + ungrouped[ui] + '" onclick="setProduct(this)">';
+      html += '<span class="dot" style="background:#888780"></span>' + ungrouped[ui] + '</button>';
+    }
+  }
+
   document.getElementById('productTabs').innerHTML = html;
+
   // 현재 선택 유지
   var tabs = document.querySelectorAll('#productTabs .tab');
   for (var i = 0; i < tabs.length; i++) {
-    if (tabs[i].getAttribute('data-product') === S.product) {
-      tabs[i].classList.add('active');
-    } else {
-      tabs[i].classList.remove('active');
-    }
+    var dp = tabs[i].getAttribute('data-product');
+    tabs[i].classList.toggle('active', dp === S.product || dp === '__group__' + S.productGroup);
   }
+}
+
+// 그룹 전체 선택
+function setProductGroup(btn, groupName) {
+  var tabs = document.querySelectorAll('#productTabs .tab');
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+  btn.classList.add('active');
+  S.product = 'all';
+  S.productGroup = groupName;
+  campaignCache = {};
+  sheetsCache.aimban && (sheetsCache.aimban._filteredNSA = null);
+  renderWithData();
 }
 function setCh(btn) {
   var clicked = btn.getAttribute('data-ch');
