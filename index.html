@@ -346,6 +346,149 @@ var RAW = {
   aimban: {nsa:EMPTY, nbsa:EMPTY, ngfa:EMPTY, kakao:EMPTY}
 };
 
+// ── 메모 기능 ────────────────────────────────────────────────────────────────
+var MEMO_API_URL = 'https://script.google.com/macros/s/AKfycbx-9BCHIjcdxujHN_EW1q8IP-pSKodqf3WMUBTnA0zVfXyNsdq4Zlkpwm2xRAL9iZ1KNA/exec';
+var memoData = {}; // { "캠페인__그룹": [{campaign, adgroup, memo, datetime, author}] }
+var memoLoaded = false;
+var activeMemoKey = null; // 현재 열린 메모 패널의 key
+
+function loadMemos() {
+  fetch(MEMO_API_URL)
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      memoData = {};
+      if (res.result === 'ok' && res.data) {
+        res.data.forEach(function(row){
+          var key = (row.campaign || '') + '__' + (row.adgroup || '');
+          if (!memoData[key]) memoData[key] = [];
+          memoData[key].push(row);
+        });
+      }
+      memoLoaded = true;
+      renderCampaignTable();
+    })
+    .catch(function(){ memoLoaded = true; });
+}
+
+function getMemoCount(campaign, adgroup) {
+  var key = campaign + '__' + adgroup;
+  return (memoData[key] || []).length;
+}
+
+function getNowDatetime() {
+  var now = new Date();
+  var pad = function(n){ return n < 10 ? '0' + n : n; };
+  return now.getFullYear() + '.' + pad(now.getMonth()+1) + '.' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+}
+
+function toggleMemoPanel(campaign, adgroup, event) {
+  if (event) event.stopPropagation();
+  var key = campaign + '__' + adgroup;
+  if (activeMemoKey === key) {
+    activeMemoKey = null;
+  } else {
+    activeMemoKey = key;
+  }
+  renderCampaignTable();
+  // 메모 패널로 스크롤
+  if (activeMemoKey) {
+    setTimeout(function(){
+      var el = document.getElementById('memo-panel-' + key.replace(/[^a-zA-Z0-9가-힣]/g, '_'));
+      if (el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, 100);
+  }
+}
+
+function saveMemo(campaign, adgroup) {
+  var key = campaign + '__' + adgroup;
+  var safeId = key.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+  var ta = document.getElementById('memo-input-' + safeId);
+  if (!ta || !ta.value.trim()) return;
+  var memoText = ta.value.trim();
+  var dt = getNowDatetime();
+
+  var btn = document.getElementById('memo-save-btn-' + safeId);
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+
+  fetch(MEMO_API_URL, {
+    method: 'POST',
+    body: JSON.stringify({action:'add', campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:''}),
+    headers: {'Content-Type': 'text/plain'}
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(res){
+    if (res.result === 'ok') {
+      if (!memoData[key]) memoData[key] = [];
+      memoData[key].push({campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:''});
+      ta.value = '';
+      renderCampaignTable();
+    } else {
+      alert('저장 실패: ' + (res.message || '오류'));
+      if (btn) { btn.disabled = false; btn.textContent = '저장'; }
+    }
+  })
+  .catch(function(){
+    alert('저장 중 오류가 발생했어요.');
+    if (btn) { btn.disabled = false; btn.textContent = '저장'; }
+  });
+}
+
+function deleteMemo(campaign, adgroup, datetime, event) {
+  if (event) event.stopPropagation();
+  if (!confirm('이 메모를 삭제할까요?')) return;
+  var key = campaign + '__' + adgroup;
+
+  fetch(MEMO_API_URL, {
+    method: 'POST',
+    body: JSON.stringify({action:'delete', campaign:campaign, adgroup:adgroup, datetime:datetime}),
+    headers: {'Content-Type': 'text/plain'}
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(res){
+    if (res.result === 'ok') {
+      if (memoData[key]) {
+        memoData[key] = memoData[key].filter(function(m){ return m.datetime !== datetime; });
+      }
+      renderCampaignTable();
+    }
+  });
+}
+
+function renderMemoPanel(campaign, adgroup, colSpan) {
+  var key = campaign + '__' + adgroup;
+  var safeId = key.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+  var memos = memoData[key] || [];
+  var memosHtml = '';
+  memos.forEach(function(m){
+    var dtEsc = (m.datetime || '').replace(/'/g, "\\'");
+    var campEsc = campaign.replace(/'/g, "\\'");
+    var grpEsc = adgroup.replace(/'/g, "\\'");
+    memosHtml += '<div style="background:white;border:1px solid #dbeafe;border-radius:6px;padding:10px 12px;margin-bottom:8px">';
+    memosHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">';
+    memosHtml += '<span style="font-size:11px;color:#3b82f6;font-weight:600">' + (m.datetime || '') + '</span>';
+    memosHtml += '<span style="font-size:11px;color:#9ca3af;cursor:pointer" onclick="deleteMemo(\'' + campEsc + '\',\'' + grpEsc + '\',\'' + dtEsc + '\',event)">삭제</span>';
+    memosHtml += '</div>';
+    memosHtml += '<p style="margin:0;font-size:12px;color:#1f2937;line-height:1.6;white-space:pre-wrap">' + (m.memo || '').replace(/</g,'&lt;') + '</p>';
+    memosHtml += '</div>';
+  });
+
+  var html = '<tr id="memo-panel-' + safeId + '" onclick="event.stopPropagation()">';
+  html += '<td colspan="' + colSpan + '" style="padding:0;border-bottom:2px solid #3b82f6">';
+  html += '<div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:14px 20px">';
+  html += '<div style="font-size:12px;font-weight:600;color:#1d4ed8;margin-bottom:10px">📋 메모 — ' + adgroup + '</div>';
+  if (memosHtml) {
+    html += memosHtml;
+  } else {
+    html += '<div style="font-size:12px;color:#9ca3af;margin-bottom:10px">아직 메모가 없어요.</div>';
+  }
+  html += '<div style="background:white;border:1px solid #dbeafe;border-radius:6px;padding:10px 12px">';
+  html += '<textarea id="memo-input-' + safeId + '" placeholder="메모를 입력하세요..." onclick="event.stopPropagation()" style="width:100%;border:none;outline:none;resize:none;font-size:12px;color:#1f2937;background:transparent;min-height:52px;line-height:1.6;font-family:\'Noto Sans KR\',sans-serif;box-sizing:border-box"></textarea>';
+  html += '<div style="display:flex;justify-content:flex-end;margin-top:6px">';
+  html += '<button id="memo-save-btn-' + safeId + '" onclick="saveMemo(\'' + campaign.replace(/'/g,"\\'") + '\',\'' + adgroup.replace(/'/g,"\\'") + '\');event.stopPropagation()" style="font-size:12px;padding:5px 14px;border-radius:5px;border:1px solid #3b82f6;background:#3b82f6;color:white;cursor:pointer;font-family:\'Noto Sans KR\',sans-serif">저장</button>';
+  html += '</div></div></div></td></tr>';
+  return html;
+}
+
 // ── Google Sheets CSV 연동 ────────────────────────────────────────────────────
 // ── 아임반 CSV URL ─────────────────────────────────────────────────────────
 // Google Sheets 웹게시 URL을 아래에 입력하세요
@@ -1535,10 +1678,11 @@ function renderCampaignTable() {
   for (var j = 0; j < EXTRA_COLS.length; j++) {
     headHtml += '<th style="' + thBase + ';text-align:right;border-left:1px solid var(--border2)" onclick="sortCampTable(\'' + EXTRA_COLS[j].key + '\')">' + EXTRA_COLS[j].label + sortArrow(EXTRA_COLS[j].key, campTableSort) + '</th>';
   }
+  headHtml += '<th style="' + thBase + ';text-align:center;width:52px;cursor:default">메모</th>';
   document.getElementById('campTableHead').innerHTML = headHtml;
 
   var multiCh = activeChs.length > 1;
-  var colSpan = CAMP_COLS.length + EXTRA_COLS.length + 1 + (multiCh ? 1 : 0);
+  var colSpan = CAMP_COLS.length + EXTRA_COLS.length + 2 + (multiCh ? 1 : 0);
 
   // 캠페인별 계층 데이터 수집
   var hierMerged = {};
@@ -1637,6 +1781,7 @@ function renderCampaignTable() {
     for (var j = 0; j < CAMP_COLS.length; j++) html += tdNum(d2[CAMP_COLS[j].key], CAMP_COLS[j].type);
     var ext2 = calcExtended(r);
     for (var j = 0; j < EXTRA_COLS.length; j++) html += '<td style="padding:8px 14px;text-align:right;font-family:\'Inter\',sans-serif;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text);border-left:' + (j===0?'1px solid var(--border2)':'none') + '">' + fmt(ext2[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + '</td>';
+    html += '<td style="padding:8px 14px;text-align:center"></td>';
     html += '</tr>';
 
       if (campPrevMode) {
@@ -1648,6 +1793,7 @@ function renderCampaignTable() {
           if (multiCh) html += '<td></td>';
           for (var j = 0; j < CAMP_COLS.length; j++) html += '<td style="padding:3px 14px 6px;text-align:right;font-family:\'Inter\',sans-serif;font-size:11px;font-variant-numeric:tabular-nums;color:#2d3748">' + fmt(pd2[CAMP_COLS[j].key], CAMP_COLS[j].type) + changeArrow(d2[CAMP_COLS[j].key], pd2[CAMP_COLS[j].key], CAMP_COLS[j].type) + '</td>';
           for (var j = 0; j < EXTRA_COLS.length; j++) html += '<td style="padding:3px 14px 6px;text-align:right;font-family:\'Inter\',sans-serif;font-size:11px;font-variant-numeric:tabular-nums;color:#2d3748;border-left:' + (j===0?'1px solid var(--border2)':'none') + '">' + fmt(pext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + changeArrow(ext2[EXTRA_COLS[j].key], pext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + '</td>';
+          html += '<td></td>';
           html += '</tr>';
         }
       }
@@ -1661,15 +1807,28 @@ function renderCampaignTable() {
       var gIsExp  = !!expandedGroups[gExpKey];
       var hasCreatives = Object.keys(grp.creatives || {}).filter(function(k){ return k; }).length > 0;
 
-      html += '<tr style="border-bottom:1px solid var(--border);background:rgba(0,0,0,0.018);' + (hasCreatives ? 'cursor:pointer' : '') + '" ' + (hasCreatives ? 'onclick="event.stopPropagation();toggleGroupExpand(\'' + gExpKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')"' : 'onclick="event.stopPropagation()"') + '>';
-      html += '<td style="padding:7px 14px 7px 30px;font-family:\'Noto Sans KR\',sans-serif;font-size:11px;color:#3a4150;white-space:nowrap;position:sticky;left:0;background:rgba(245,246,248,1);z-index:1">';
+      var grpMemoCount = getMemoCount(r.name, grp.name);
+      var grpMemoKey = r.name + '__' + grp.name;
+      var grpMemoActive = (activeMemoKey === grpMemoKey);
+      html += '<tr style="border-bottom:1px solid var(--border);background:' + (grpMemoActive ? 'rgba(219,234,254,0.5)' : 'rgba(0,0,0,0.018)') + ';' + (hasCreatives ? 'cursor:pointer' : '') + '" ' + (hasCreatives ? 'onclick="event.stopPropagation();toggleGroupExpand(\'' + gExpKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')"' : 'onclick="event.stopPropagation()"') + '>';
+      html += '<td style="padding:7px 14px 7px 30px;font-family:\'Noto Sans KR\',sans-serif;font-size:11px;color:#3a4150;white-space:nowrap;position:sticky;left:0;background:' + (grpMemoActive ? 'rgba(219,234,254,0.8)' : 'rgba(245,246,248,1)') + ';z-index:1">';
       html += '<span style="display:inline-block;width:16px;color:var(--muted);font-size:9px">' + (hasCreatives ? (gIsExp ? '▼' : '▶') : '') + '</span>';
       html += grp.name + '</td>';
       if (multiCh) html += '<td></td>';
       for (var j = 0; j < CAMP_COLS.length; j++) html += tdNumSub(gd[CAMP_COLS[j].key], CAMP_COLS[j].type);
       var gext = calcExtended(grp);
       for (var j = 0; j < EXTRA_COLS.length; j++) html += '<td style="padding:6px 14px;text-align:right;font-family:\'Inter\',sans-serif;font-size:11px;font-variant-numeric:tabular-nums;color:#374151;border-left:' + (j===0?'1px solid var(--border2)':'none') + '">' + fmt(gext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + '</td>';
+      html += '<td style="padding:6px 10px;text-align:center;white-space:nowrap">';
+      if (grpMemoCount > 0) {
+        html += '<span onclick="toggleMemoPanel(\'' + r.name.replace(/'/g,"\\'") + '\',\'' + grp.name.replace(/'/g,"\\'") + '\',event)" style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;background:#dbeafe;border-radius:4px;font-size:11px;color:#1d4ed8;font-weight:600;cursor:pointer" title="메모 보기/닫기">' + grpMemoCount + '</span>';
+      } else {
+        html += '<span onclick="toggleMemoPanel(\'' + r.name.replace(/'/g,"\\'") + '\',\'' + grp.name.replace(/'/g,"\\'") + '\',event)" style="font-size:13px;color:#9ca3af;cursor:pointer" title="메모 추가">+</span>';
+      }
+      html += '</td>';
       html += '</tr>';
+      if (grpMemoActive) {
+        html += renderMemoPanel(r.name, grp.name, colSpan);
+      }
 
       // 이전 동기간 그룹 서브 행
       if (campPrevMode) {
@@ -1681,6 +1840,7 @@ function renderCampaignTable() {
           if (multiCh) html += '<td></td>';
           for (var j = 0; j < CAMP_COLS.length; j++) html += '<td style="padding:2px 14px 5px;text-align:right;font-family:\'Inter\',sans-serif;font-size:10px;font-variant-numeric:tabular-nums;color:#374151">' + fmt(pgd[CAMP_COLS[j].key], CAMP_COLS[j].type) + changeArrow(gd[CAMP_COLS[j].key], pgd[CAMP_COLS[j].key], CAMP_COLS[j].type) + '</td>';
           for (var j = 0; j < EXTRA_COLS.length; j++) html += '<td style="padding:2px 14px 5px;text-align:right;font-family:\'Inter\',sans-serif;font-size:10px;font-variant-numeric:tabular-nums;color:#374151;border-left:' + (j===0?'1px solid var(--border2)':'none') + '">' + fmt(pgext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + changeArrow(gext[EXTRA_COLS[j].key], pgext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + '</td>';
+          html += '<td></td>';
           html += '</tr>';
         }
       }
@@ -1696,6 +1856,7 @@ function renderCampaignTable() {
         for (var j = 0; j < CAMP_COLS.length; j++) html += tdNumCreative(crd[CAMP_COLS[j].key], CAMP_COLS[j].type);
         var crext = calcExtended(cr);
         for (var j = 0; j < EXTRA_COLS.length; j++) html += '<td style="padding:5px 14px;text-align:right;font-family:\'Inter\',sans-serif;font-size:11px;font-variant-numeric:tabular-nums;color:#4a5568;border-left:' + (j===0?'1px solid var(--border2)':'none') + '">' + fmt(crext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + '</td>';
+        html += '<td></td>';
         html += '</tr>';
 
         // 이전 동기간 소재 서브 행
@@ -1708,6 +1869,7 @@ function renderCampaignTable() {
             if (multiCh) html += '<td></td>';
             for (var j = 0; j < CAMP_COLS.length; j++) html += '<td style="padding:2px 14px 4px;text-align:right;font-family:\'Inter\',sans-serif;font-size:10px;font-variant-numeric:tabular-nums;color:#374151">' + fmt(pcrd[CAMP_COLS[j].key], CAMP_COLS[j].type) + changeArrow(crd[CAMP_COLS[j].key], pcrd[CAMP_COLS[j].key], CAMP_COLS[j].type) + '</td>';
             for (var j = 0; j < EXTRA_COLS.length; j++) html += '<td style="padding:2px 14px 4px;text-align:right;font-family:\'Inter\',sans-serif;font-size:10px;font-variant-numeric:tabular-nums;color:#374151;border-left:' + (j===0?'1px solid var(--border2)':'none') + '">' + fmt(pcrext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + changeArrow(crext[EXTRA_COLS[j].key], pcrext[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + '</td>';
+            html += '<td></td>';
             html += '</tr>';
           }
         }
@@ -1727,6 +1889,7 @@ function renderCampaignTable() {
     for (var j = 0; j < EXTRA_COLS.length; j++) {
       html += '<td style="padding:10px 14px;text-align:right;font-family:\'Inter\',sans-serif;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;border-left:' + (j===0?'1px solid var(--border2)':'none') + '">' + fmt(totExt[EXTRA_COLS[j].key], EXTRA_COLS[j].type) + '</td>';
     }
+    html += '<td></td>';
     html += '</tr>';
   }
   document.getElementById('campTbody').innerHTML = html;
@@ -2447,6 +2610,7 @@ function renderProductTable() {
 buildMetricSelector();
 buildColDropdown();
 restoreDateRange();
+loadMemos();
 renderWithData();
 </script>
 </body>
