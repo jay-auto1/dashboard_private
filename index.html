@@ -348,9 +348,30 @@ var RAW = {
 
 // ── 메모 기능 ────────────────────────────────────────────────────────────────
 var MEMO_API_URL = 'https://script.google.com/macros/s/AKfycbx-9BCHIjcdxujHN_EW1q8IP-pSKodqf3WMUBTnA0zVfXyNsdq4Zlkpwm2xRAL9iZ1KNA/exec';
-var memoData = {}; // { "캠페인__그룹": [{campaign, adgroup, memo, datetime, author}] }
+var memoData = {};
 var memoLoaded = false;
-var activeMemoKey = null; // 현재 열린 메모 패널의 key
+var activeMemoKey = null;
+
+function getMemoAuthor() {
+  return localStorage.getItem('memoAuthorName') || '';
+}
+
+function setMemoAuthor(name) {
+  localStorage.setItem('memoAuthorName', name);
+}
+
+function promptAuthorIfNeeded() {
+  var name = getMemoAuthor();
+  if (!name) {
+    name = prompt('메모에 표시될 이름을 입력해주세요 (한 번만 입력하면 저장돼요):');
+    if (name && name.trim()) {
+      setMemoAuthor(name.trim());
+      return name.trim();
+    }
+    return '익명';
+  }
+  return name;
+}
 
 function loadMemos() {
   fetch(MEMO_API_URL)
@@ -384,13 +405,8 @@ function getNowDatetime() {
 function toggleMemoPanel(campaign, adgroup, event) {
   if (event) event.stopPropagation();
   var key = campaign + '__' + adgroup;
-  if (activeMemoKey === key) {
-    activeMemoKey = null;
-  } else {
-    activeMemoKey = key;
-  }
+  activeMemoKey = (activeMemoKey === key) ? null : key;
   renderCampaignTable();
-  // 메모 패널로 스크롤
   if (activeMemoKey) {
     setTimeout(function(){
       var el = document.getElementById('memo-panel-' + key.replace(/[^a-zA-Z0-9가-힣]/g, '_'));
@@ -406,20 +422,21 @@ function saveMemo(campaign, adgroup) {
   if (!ta || !ta.value.trim()) return;
   var memoText = ta.value.trim();
   var dt = getNowDatetime();
+  var author = promptAuthorIfNeeded();
 
   var btn = document.getElementById('memo-save-btn-' + safeId);
   if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
 
   fetch(MEMO_API_URL, {
     method: 'POST',
-    body: JSON.stringify({action:'add', campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:''}),
+    body: JSON.stringify({action:'add', campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:author}),
     headers: {'Content-Type': 'text/plain'}
   })
   .then(function(r){ return r.json(); })
   .then(function(res){
     if (res.result === 'ok') {
       if (!memoData[key]) memoData[key] = [];
-      memoData[key].push({campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:''});
+      memoData[key].push({campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:author});
       ta.value = '';
       renderCampaignTable();
     } else {
@@ -454,28 +471,49 @@ function deleteMemo(campaign, adgroup, datetime, event) {
   });
 }
 
+function changeAuthorName(event) {
+  if (event) event.stopPropagation();
+  var current = getMemoAuthor();
+  var name = prompt('새 이름을 입력해주세요:', current);
+  if (name && name.trim()) {
+    setMemoAuthor(name.trim());
+    renderCampaignTable();
+  }
+}
+
 function renderMemoPanel(campaign, adgroup, colSpan) {
   var key = campaign + '__' + adgroup;
   var safeId = key.replace(/[^a-zA-Z0-9가-힣]/g, '_');
   var memos = memoData[key] || [];
+  var currentAuthor = getMemoAuthor();
+
   var memosHtml = '';
   memos.forEach(function(m){
-    var dtEsc = (m.datetime || '').replace(/'/g, "\\'");
-    var campEsc = campaign.replace(/'/g, "\\'");
-    var grpEsc = adgroup.replace(/'/g, "\\'");
+    var dtEsc = (m.datetime || '').replace(/'/g, "\'");
+    var campEsc = campaign.replace(/'/g, "\'");
+    var grpEsc = adgroup.replace(/'/g, "\'");
     memosHtml += '<div style="background:white;border:1px solid #dbeafe;border-radius:6px;padding:10px 12px;margin-bottom:8px">';
     memosHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">';
+    memosHtml += '<div style="display:flex;align-items:center;gap:8px">';
     memosHtml += '<span style="font-size:11px;color:#3b82f6;font-weight:600">' + (m.datetime || '') + '</span>';
+    if (m.author) {
+      memosHtml += '<span style="font-size:11px;color:#6b7280;background:#f3f4f6;padding:1px 6px;border-radius:3px">' + (m.author || '') + '</span>';
+    }
+    memosHtml += '</div>';
     memosHtml += '<span style="font-size:11px;color:#9ca3af;cursor:pointer" onclick="deleteMemo(\'' + campEsc + '\',\'' + grpEsc + '\',\'' + dtEsc + '\',event)">삭제</span>';
     memosHtml += '</div>';
     memosHtml += '<p style="margin:0;font-size:12px;color:#1f2937;line-height:1.6;white-space:pre-wrap">' + (m.memo || '').replace(/</g,'&lt;') + '</p>';
     memosHtml += '</div>';
   });
 
+  var authorLabel = currentAuthor ? currentAuthor : '익명';
   var html = '<tr id="memo-panel-' + safeId + '" onclick="event.stopPropagation()">';
   html += '<td colspan="' + colSpan + '" style="padding:0;border-bottom:2px solid #3b82f6">';
   html += '<div style="background:#eff6ff;border-left:3px solid #3b82f6;padding:14px 20px">';
-  html += '<div style="font-size:12px;font-weight:600;color:#1d4ed8;margin-bottom:10px">📋 메모 — ' + adgroup + '</div>';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  html += '<div style="font-size:12px;font-weight:600;color:#1d4ed8">📋 메모 — ' + adgroup + '</div>';
+  html += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#6b7280">작성자: <span style="font-weight:500;color:#374151">' + authorLabel + '</span><span onclick="changeAuthorName(event)" style="cursor:pointer;color:#3b82f6;text-decoration:underline">변경</span></div>';
+  html += '</div>';
   if (memosHtml) {
     html += memosHtml;
   } else {
@@ -484,7 +522,7 @@ function renderMemoPanel(campaign, adgroup, colSpan) {
   html += '<div style="background:white;border:1px solid #dbeafe;border-radius:6px;padding:10px 12px">';
   html += '<textarea id="memo-input-' + safeId + '" placeholder="메모를 입력하세요..." onclick="event.stopPropagation()" style="width:100%;border:none;outline:none;resize:none;font-size:12px;color:#1f2937;background:transparent;min-height:52px;line-height:1.6;font-family:\'Noto Sans KR\',sans-serif;box-sizing:border-box"></textarea>';
   html += '<div style="display:flex;justify-content:flex-end;margin-top:6px">';
-  html += '<button id="memo-save-btn-' + safeId + '" onclick="saveMemo(\'' + campaign.replace(/'/g,"\\'") + '\',\'' + adgroup.replace(/'/g,"\\'") + '\');event.stopPropagation()" style="font-size:12px;padding:5px 14px;border-radius:5px;border:1px solid #3b82f6;background:#3b82f6;color:white;cursor:pointer;font-family:\'Noto Sans KR\',sans-serif">저장</button>';
+  html += '<button id="memo-save-btn-' + safeId + '" onclick="saveMemo(\'' + campaign.replace(/'/g,"\'") + '\',\'' + adgroup.replace(/'/g,"\'") + '\');event.stopPropagation()" style="font-size:12px;padding:5px 14px;border-radius:5px;border:1px solid #3b82f6;background:#3b82f6;color:white;cursor:pointer;font-family:\'Noto Sans KR\',sans-serif">저장</button>';
   html += '</div></div></div></td></tr>';
   return html;
 }
