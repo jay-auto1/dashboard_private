@@ -1963,10 +1963,18 @@ function setBrand(btn) { renderWithData(); }
 
 
 function setProduct(btn) {
-  var tabs = document.querySelectorAll('#productTabs .tab');
-  for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
-  btn.classList.add('active');
-  S.product = btn.getAttribute('data-product');
+  var dp = btn.getAttribute('data-product');
+  // 이미 선택된 탭 클릭 → 전체 해제
+  if (S.product === dp) {
+    S.product = 'all';
+    S.productGroup = '';
+    campaignCache = {};
+    sheetsCache.aimban && (sheetsCache.aimban._filteredNSA = null);
+    syncProductTabActive();
+    renderWithData();
+    return;
+  }
+  S.product = dp;
   S.productGroup = '';
   campaignCache = {};
   sheetsCache.aimban && (sheetsCache.aimban._filteredNSA = null);
@@ -1976,8 +1984,8 @@ function setProduct(btn) {
 
 // 제품 그룹 정의 ← 여기서 수정하세요
 var PRODUCT_GROUPS = {
-  '메인제품': ['헤드레스트', '핸들커버', '방석', '킥매트', '허리쿠션', '프리백커버'],
-  '기타제품': ['대시보드커버', '데스크매트', '라나매트', '루미락', '모네틱', '사운드픽셀', '심포라', '전자기기', '하이퍼젯'],
+  '메인제품': ['헤드레스트', '핸들커버', '방석', '킥매트', '허리쿠션', '프리백커버', '콘솔쿠션'],
+  '기타제품': ['대시보드커버', '데스크매트', '라나매트', '루미락', '모네틱', '사운드픽셀', '심포라', '전자기기', '트렁크정리함', '하이퍼젯'],
   '공통': ['공통']
 };
 var PRODUCT_GROUP_COLORS = {'메인제품': '#4f8ef7', '기타제품': '#1D9E75', '공통': '#888780'};
@@ -2045,6 +2053,16 @@ function syncProductTabActive() {
 // 그룹 전체 버튼
 function setProductGroupAll(btn) {
   var groupKey = btn.getAttribute('data-group');
+  // 이미 선택된 그룹 전체 버튼 클릭 → 해제
+  if (S.product === 'all' && S.productGroup === groupKey) {
+    S.product = 'all';
+    S.productGroup = '';
+    campaignCache = {};
+    sheetsCache.aimban && (sheetsCache.aimban._filteredNSA = null);
+    syncProductTabActive();
+    renderWithData();
+    return;
+  }
   S.product = 'all';
   S.productGroup = groupKey;
   campaignCache = {};
