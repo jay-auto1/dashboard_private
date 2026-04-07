@@ -162,6 +162,24 @@ tr:hover td{background:var(--bg)}
     <div class="iitems" id="ins"></div>
   </div>
   <div class="div"></div>
+
+  <!-- 스마트스토어 통계 채널별 그래프 -->
+  <div class="panel" style="margin-bottom:1rem">
+    <div class="ph">
+      <div class="tt" style="font-size:13px;font-weight:700">스마트스토어 통계 — 채널명별 현황</div>
+      <select id="ch-metric" onchange="renderChChart()" style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border-m);background:var(--surface);color:var(--text);font-family:inherit;cursor:pointer">
+        <option value="cust">고객수</option>
+        <option value="in">유입수</option>
+        <option value="ord_lc">결제수 (마지막클릭)</option>
+        <option value="rev_lc" selected>결제금액 (마지막클릭)</option>
+        <option value="ord_14">결제수 (+14일 기여도)</option>
+        <option value="rev_14">결제금액 (+14일 기여도)</option>
+      </select>
+    </div>
+    <div style="position:relative;width:100%;height:280px"><canvas id="chChart"></canvas></div>
+    <div class="leg" id="ch-leg" style="margin-top:.75rem"></div>
+    <p class="pn" id="ch-note">* 스마트스토어 마케팅분석 기준 / 결제금액 단위: 원</p>
+  </div>
   <div class="tp">
     <div class="th2"><div class="tt">매체별 상세 비교</div><span class="vb" id="tl">클릭수 vs 유입수</span></div>
     <div class="tw"><table id="dt"></table></div>
@@ -396,25 +414,40 @@ function renderDashboard(){
 
   const tabs=[
     {lt:'매체 대시보드 — 클릭수',rt:'스마트스토어 통계 — 유입수',tl:'클릭수 vs 유입수',
-     lk:[{c:'#3b5998',l:'META',v:Math.round(meT.clicks).toLocaleString(),s:'클릭수'},{c:'#185FA5',l:'GFA',v:Math.round(gT.clicks).toLocaleString(),s:'클릭수'},{c:'#3B6D11',l:'SA',v:Math.round(saT.clicks).toLocaleString(),s:'클릭수'},{c:'#854F0B',l:'BSA',v:'—',s:'연동예정'}],
-     rk:[{c:'#185FA5',l:'GFA(성과형)',v:Math.round(gIn).toLocaleString(),s:'유입수'},{c:'#3B6D11',l:'SA(검색/쇼핑)',v:Math.round(saIn).toLocaleString(),s:'유입수'},{c:'#534AB7',l:'META(사용자정의)',v:Math.round(meIn).toLocaleString(),s:'유입수'}],
-     ll:[{c:'#3b5998',l:'META'},{c:'#185FA5',l:'GFA'},{c:'#3B6D11',l:'SA'}],rl:[{c:'#185FA5',l:'GFA'},{c:'#3B6D11',l:'SA'},{c:'#534AB7',l:'META(사용자정의)'}],
-     lch:{labels:['META','GFA','SA'],data:[meT.clicks,gT.clicks,saT.clicks],colors:['#3b5998','#185FA5','#3B6D11']},
-     rch:{labels:['GFA','SA','META'],data:[gIn,saIn,meIn],colors:['#185FA5','#3B6D11','#534AB7']},
-     ln:'* 각 매체 플랫폼 대시보드 기준 클릭수',rn:'* 유입수 = 스마트스토어 마케팅분석 기준 / META → 사용자정의 채널로 집계',
-     th:['매체','매체 클릭수','통계 유입수','차이','비고'],
-     tr:[['<span class="badge bme">META</span>',Math.round(meT.clicks).toLocaleString(),Math.round(meIn).toLocaleString(),dn(meIn,meT.clicks),'사용자정의 채널로 집계'],['<span class="badge bgf">GFA</span>',Math.round(gT.clicks).toLocaleString(),Math.round(gIn).toLocaleString(),dn(gIn,gT.clicks),'성과형 채널 유입'],['<span class="badge bsa">SA</span>',Math.round(saT.clicks).toLocaleString(),Math.round(saIn).toLocaleString(),dn(saIn,saT.clicks),'검색+쇼핑 합산'],['<span class="badge bbs">BSA</span>','—','—','—','연동 예정'],['합계',Math.round(meT.clicks+gT.clicks+saT.clicks).toLocaleString(),Math.round(meIn+gIn+saIn).toLocaleString(),'','']],
-     tn:'* SA 유입수 = 검색광고+쇼핑 채널그룹 합산 기준',
-     ins:[{t:'i',tx:`<b>GFA 클릭(${Math.round(gT.clicks).toLocaleString()}) vs 통계 유입(${Math.round(gIn).toLocaleString()})</b> — ${Math.abs(Math.round(gIn-gT.clicks)).toLocaleString()}건 차이`},{t:'w',tx:'<b>META → 사용자정의 채널</b>로 통계에 집계. 메타 광고비 증감 시 사용자정의 매출 변동 확인'}]},
+     lk:[{c:'#3b5998',l:'META',v:Math.round(meT.clicks).toLocaleString(),s:'클릭수'},{c:'#185FA5',l:'GFA',v:Math.round(gT.clicks).toLocaleString(),s:'클릭수'},{c:'#3B6D11',l:'SA',v:Math.round(saT.clicks).toLocaleString(),s:'클릭수'},{c:'#854F0B',l:'BSA',v:Math.round(sum(sa_brand,saClick)).toLocaleString(),s:'클릭수'}],
+     rk:[{c:'#3b5998',l:'META(사용자정의)',v:Math.round(meIn).toLocaleString(),s:'유입수'},{c:'#185FA5',l:'성과형디스플레이',v:Math.round(mkt_perf_in).toLocaleString(),s:'유입수'},{c:'#3B6D11',l:'검색광고(쇼핑+사이트)',v:Math.round(sum(mkt_shopping,mkIn)+sum(mkt_power,mkIn)).toLocaleString(),s:'유입수'},{c:'#854F0B',l:'브랜드검색(일반형)',v:Math.round(sum(mkt_brand,mkIn)).toLocaleString(),s:'유입수'}],
+     ll:[{c:'#3b5998',l:'META'},{c:'#185FA5',l:'GFA'},{c:'#3B6D11',l:'SA'},{c:'#854F0B',l:'BSA(브랜드)'}],
+     rl:[{c:'#3b5998',l:'META(사용자정의)'},{c:'#185FA5',l:'성과형디스플레이'},{c:'#3B6D11',l:'검색광고'},{c:'#854F0B',l:'브랜드검색'}],
+     lch:{labels:['META','GFA','SA','BSA'],data:[meT.clicks,gT.clicks,saT.clicks-sum(sa_brand,saClick),sum(sa_brand,saClick)],colors:['#3b5998','#185FA5','#3B6D11','#854F0B']},
+     rch:{labels:['META','성과형','검색광고','브랜드검색'],data:[meIn,mkt_perf_in,sum(mkt_shopping,mkIn)+sum(mkt_power,mkIn),sum(mkt_brand,mkIn)],colors:['#3b5998','#185FA5','#3B6D11','#854F0B']},
+     ln:'* 각 매체 플랫폼 대시보드 기준 클릭수 / BSA = 브랜드검색광고 캠페인유형',rn:'* 유입수 = 스마트스토어 마케팅분석 기준 / META → 사용자정의 채널로 집계',
+     th:['매체','매체 클릭수','통계 채널','통계 유입수','차이'],
+     tr:[
+       ['<span class="badge bme">META</span>',Math.round(meT.clicks).toLocaleString(),'사용자정의',Math.round(meIn).toLocaleString(),dn(meIn,meT.clicks)],
+       ['<span class="badge bgf">GFA</span>',Math.round(gT.clicks).toLocaleString(),'성과형디스플레이',Math.round(mkt_perf_in).toLocaleString(),dn(mkt_perf_in,gT.clicks)],
+       ['<span class="badge bsa">SA</span>',Math.round(saT.clicks-sum(sa_brand,saClick)).toLocaleString(),'검색광고(쇼핑+사이트)',Math.round(sum(mkt_shopping,mkIn)+sum(mkt_power,mkIn)).toLocaleString(),dn(sum(mkt_shopping,mkIn)+sum(mkt_power,mkIn),saT.clicks-sum(sa_brand,saClick))],
+       ['<span class="badge bbs">BSA</span>',Math.round(sum(sa_brand,saClick)).toLocaleString(),'브랜드검색(일반형)',Math.round(sum(mkt_brand,mkIn)).toLocaleString(),dn(sum(mkt_brand,mkIn),sum(sa_brand,saClick))],
+       ['합계',Math.round(meT.clicks+gT.clicks+saT.clicks).toLocaleString(),'전체',Math.round(meIn+mkt_perf_in+sum(mkt_shopping,mkIn)+sum(mkt_power,mkIn)+sum(mkt_brand,mkIn)).toLocaleString(),''],
+     ],
+     tn:'* BSA = SA 브랜드검색광고 캠페인유형 / SA 클릭수는 쇼핑+파워링크만 집계',
+     ins:[{t:'i',tx:`<b>GFA 클릭(${Math.round(gT.clicks).toLocaleString()}) vs 성과형 유입(${Math.round(mkt_perf_in).toLocaleString()})</b> — ${Math.abs(Math.round(mkt_perf_in-gT.clicks)).toLocaleString()}건 차이`},{t:'w',tx:'<b>META → 사용자정의 채널</b>로 통계에 집계. 메타 광고비 증감 시 사용자정의 매출 변동 확인'}]},
     {lt:'매체 대시보드 — 매출',rt:'스마트스토어 통계 — 매출 (+14일)',tl:'매체 매출 vs 통계 매출',
-     lk:[{c:'#3b5998',l:'META',v:won(meT.rev),s:'전환매출'},{c:'#185FA5',l:'GFA',v:won(gT.rev),s:'전환매출'},{c:'#3B6D11',l:'SA',v:won(saT.rev),s:'전환매출'},{c:'#854F0B',l:'BSA',v:'—',s:'연동예정'}],
-     rk:[{c:'#185FA5',l:'GFA(성과형)',v:won(gRm),s:'+14일'},{c:'#3B6D11',l:'SA(검색/쇼핑)',v:won(saRm),s:'+14일'},{c:'#534AB7',l:'META(사용자정의)',v:won(meRm),s:'+14일'}],
-     ll:[{c:'#3b5998',l:'META'},{c:'#185FA5',l:'GFA'},{c:'#3B6D11',l:'SA'}],rl:[{c:'#185FA5',l:'GFA +14일'},{c:'#3B6D11',l:'SA +14일'},{c:'#534AB7',l:'META'}],
-     lch:{labels:['META','GFA','SA'],data:[meT.rev/1000,gT.rev/1000,saT.rev/1000],colors:['#3b5998','#185FA5','#3B6D11']},
-     rch:{labels:['GFA','SA','META'],data:[gRm/1000,saRm/1000,meRm/1000],colors:['#185FA5','#3B6D11','#534AB7']},
+     lk:[{c:'#3b5998',l:'META',v:won(meT.rev),s:'전환매출'},{c:'#185FA5',l:'GFA',v:won(gT.rev),s:'전환매출'},{c:'#3B6D11',l:'SA',v:won(saT.rev-saByType.brand.rev),s:'전환매출'},{c:'#854F0B',l:'BSA',v:won(saByType.brand.rev),s:'전환매출'}],
+     rk:[{c:'#3b5998',l:'META(사용자정의)',v:won(meRm),s:'+14일'},{c:'#185FA5',l:'성과형디스플레이',v:won(mkt_perf_rm),s:'+14일'},{c:'#3B6D11',l:'검색광고(쇼핑+사이트)',v:won((sum(mkt_shopping,mkR14)||sum(mkt_shopping,mkRl))+(sum(mkt_power,mkR14)||sum(mkt_power,mkRl))),s:'+14일'},{c:'#854F0B',l:'브랜드검색(일반형)',v:won(sum(mkt_brand,mkR14)||sum(mkt_brand,mkRl)),s:'+14일'}],
+     ll:[{c:'#3b5998',l:'META'},{c:'#185FA5',l:'GFA'},{c:'#3B6D11',l:'SA'},{c:'#854F0B',l:'BSA(브랜드)'}],
+     rl:[{c:'#3b5998',l:'META(사용자정의)'},{c:'#185FA5',l:'성과형디스플레이'},{c:'#3B6D11',l:'검색광고'},{c:'#854F0B',l:'브랜드검색'}],
+     lch:{labels:['META','GFA','SA','BSA'],data:[meT.rev/1000,gT.rev/1000,(saT.rev-saByType.brand.rev)/1000,saByType.brand.rev/1000],colors:['#3b5998','#185FA5','#3B6D11','#854F0B']},
+     rch:{labels:['META','성과형','검색광고','브랜드검색'],data:[meRm/1000,mkt_perf_rm/1000,((sum(mkt_shopping,mkR14)||sum(mkt_shopping,mkRl))+(sum(mkt_power,mkR14)||sum(mkt_power,mkRl)))/1000,(sum(mkt_brand,mkR14)||sum(mkt_brand,mkRl))/1000],colors:['#3b5998','#185FA5','#3B6D11','#854F0B']},
      ln:'* 각 매체 플랫폼 전환 기여 기준 (기여 기간·범위 상이)',rn:'* +14일 기여도추정 기준 / 단위 차트: 천원(K)',
-     th:['매체','매체 전환매출','통계 매출(+14일)','괴리','비고'],
-     tr:[['<span class="badge bme">META</span>',won(meT.rev),won(meRm),ds(meRm,meT.rev),'사용자정의 채널'],['<span class="badge bgf">GFA</span>',won(gT.rev),won(gRm),ds(gRm,gT.rev),'플랫폼 과대집계 가능'],['<span class="badge bgf">GFA+서비스공통</span>',won(gT.rev),won(gRm+svcR),ds(gRm+svcR,gT.rev),'공통 합산'],['<span class="badge bsa">SA</span>',won(saT.rev),won(saRm),ds(saRm,saT.rev),'근사 수준'],['판매성과(전체)','—',won(slTot),'—','미추적 포함 전체']],
+     th:['매체','매체 전환매출','통계 채널','통계 매출(+14일)','괴리'],
+     tr:[
+       ['<span class="badge bme">META</span>',won(meT.rev),'사용자정의',won(meRm),ds(meRm,meT.rev)],
+       ['<span class="badge bgf">GFA</span>',won(gT.rev),'성과형디스플레이',won(mkt_perf_rm),ds(mkt_perf_rm,gT.rev)],
+       ['<span class="badge bgf">GFA+서비스공통</span>','—','성과형+공통',won(mkt_perf_rm+svcR),'—'],
+       ['<span class="badge bsa">SA</span>',won(saT.rev-saByType.brand.rev),'검색광고(쇼핑+사이트)',won((sum(mkt_shopping,mkR14)||sum(mkt_shopping,mkRl))+(sum(mkt_power,mkR14)||sum(mkt_power,mkRl))),ds((sum(mkt_shopping,mkR14)||sum(mkt_shopping,mkRl))+(sum(mkt_power,mkR14)||sum(mkt_power,mkRl)),saT.rev-saByType.brand.rev)],
+       ['<span class="badge bbs">BSA</span>',won(saByType.brand.rev),'브랜드검색(일반형)',won(sum(mkt_brand,mkR14)||sum(mkt_brand,mkRl)),ds(sum(mkt_brand,mkR14)||sum(mkt_brand,mkRl),saByType.brand.rev)],
+       ['판매성과(전체)','—','전체',won(slTot),'—'],
+     ],
      tn:'* 판매성과 = 재구매·직접유입 등 미추적 매출 포함 전체',
      ins:[{t:'d',tx:`<b>GFA 플랫폼(${won(gT.rev)}) vs 통계(${won(gRm)})</b> — 괴리. 서비스공통(${won(svcR)}) 합산 시 축소`},{t:'w',tx:`<b>판매성과(${won(slTot)}) - 마케팅분석 = 미추적 매출</b> — 광고 중단 시 유지되는 베이스라인`},{t:'i',tx:'<b>META → 사용자정의</b> — 광고 중단 시 사용자정의 매출 급감 여부로 기여도 검증 가능'}]},
     {lt:'매체 대시보드 — 장바구니 매출',rt:'스마트스토어 통계 — (해당 없음)',tl:'장바구니 매출',
@@ -428,8 +461,8 @@ function renderDashboard(){
      tr:[['<span class="badge bme">META</span>','연동 필요','—',''],['<span class="badge bgf">GFA</span>','연동 필요',Math.round(gOrd).toLocaleString(),'마지막클릭'],['<span class="badge bsa">SA</span>','연동 필요',Math.round(saOrd).toLocaleString(),'마지막클릭'],['<span class="badge bbs">BSA</span>','연동 필요','—','연동 예정']],
      tn:'',ins:[{t:'i',tx:'<b>장바구니 매출</b>은 각 플랫폼 전환 유형별 별도 추출 후 시트 추가 시 자동 반영'},{t:'w',tx:'<b>통계에 장바구니 항목 없음</b> — 결제수로 간접 비교만 가능'}]},
     {lt:'매체 대시보드 — ROAS',rt:'스마트스토어 통계 — 실질 ROAS',tl:'ROAS 비교',
-     lk:[{c:'#3b5998',l:'META',v:meT.roas+'%',s:'플랫폼'},{c:'#185FA5',l:'GFA',v:gT.roas+'%',s:'플랫폼'},{c:'#3B6D11',l:'SA',v:saT.roas+'%',s:'플랫폼'},{c:'#854F0B',l:'BSA',v:'—',s:'연동예정'}],
-     rk:[{c:'#185FA5',l:'GFA 실질(합산)',v:pct(gRoasR),s:'성과형+공통/광고비'},{c:'#185FA5',l:'GFA(성과형만)',v:pct(gRoasO),s:'마지막클릭/광고비'},{c:'#3B6D11',l:'SA 실질',v:pct(saRoasR),s:'통계매출/광고비'}],
+     lk:[{c:'#3b5998',l:'META',v:meT.roas+'%',s:'플랫폼'},{c:'#185FA5',l:'GFA',v:gT.roas+'%',s:'플랫폼'},{c:'#3B6D11',l:'SA',v:saT.roas+'%',s:'플랫폼'},{c:'#854F0B',l:'BSA',v:saByType.brand.cost>0?pct((sum(mkt_brand,mkR14)||sum(mkt_brand,mkRl))/saByType.brand.cost):'—',s:'실질ROAS'}],
+     rk:[{c:'#3b5998',l:'META 실질',v:meT.cost>0?pct(meRm/meT.cost):'—',s:'통계매출/광고비'},{c:'#185FA5',l:'GFA 실질(합산)',v:pct(gRoasR),s:'성과형+공통/광고비'},{c:'#3B6D11',l:'SA 실질',v:pct(saRoasR),s:'통계매출/광고비'},{c:'#854F0B',l:'BSA 실질',v:saByType.brand.cost>0?pct((sum(mkt_brand,mkR14)||sum(mkt_brand,mkRl))/saByType.brand.cost):'—',s:'통계매출/광고비'}],
      ll:[{c:'#3b5998',l:'META'},{c:'#185FA5',l:'GFA'},{c:'#3B6D11',l:'SA'}],rl:[{c:'#185FA5',l:'GFA 플랫폼'},{c:'#7F77DD',l:'GFA 실질'},{c:'#9FE1CB',l:'GFA 성과형만'}],
      lch:{labels:['META','GFA','SA'],data:[meT.roas,gT.roas,saT.roas],colors:['#3b5998','#185FA5','#3B6D11']},
      rch:{labels:['GFA 플랫폼','GFA 실질','GFA 성과형만'],data:[gT.roas,gRoasR*100,gRoasO*100],colors:['#185FA5','#7F77DD','#9FE1CB']},
@@ -440,19 +473,26 @@ function renderDashboard(){
      ins:[{t:'d',tx:`<b>GFA 플랫폼(${gT.roas}%) vs 실질(${pct(gRoasR)})</b> — 플랫폼이 더 넓은 기여 기간 적용`},{t:'w',tx:`<b>성과형만 ${pct(gRoasO)}</b> — 서비스공통(${won(svcR)}) 포함 시 실질 ROAS 상승`}]},
     {lt:'매체 대시보드 — 전환율 (CVR)',rt:'스마트스토어 통계 — 결제율',tl:'전환율 vs 결제율',
      lk:[{c:'#3b5998',l:'META',v:meT.cvr+'%',s:'CVR'},{c:'#185FA5',l:'GFA',v:gT.cvr+'%',s:'CVR'},{c:'#3B6D11',l:'SA',v:saT.cvr+'%',s:'CVR'},{c:'#854F0B',l:'BSA',v:'—',s:'연동예정'}],
-     rk:[{c:'#185FA5',l:'GFA 결제율',v:pct(gCvr2),s:'결제수/유입수'},{c:'#3B6D11',l:'SA 결제율',v:pct(saCvr2),s:'결제수/유입수'},{c:'#534AB7',l:'META 결제율',v:pct(meCvr2),s:'결제수/유입수'}],
-     ll:[{c:'#3b5998',l:'META CVR'},{c:'#185FA5',l:'GFA CVR'},{c:'#3B6D11',l:'SA CVR'}],rl:[{c:'#185FA5',l:'GFA 결제율'},{c:'#3B6D11',l:'SA 결제율'},{c:'#534AB7',l:'META 결제율'}],
-     lch:{labels:['META','GFA','SA'],data:[meT.cvr,gT.cvr,saT.cvr],colors:['#3b5998','#185FA5','#3B6D11']},
-     rch:{labels:['GFA','SA','META'],data:[gCvr2*100,saCvr2*100,meCvr2*100],colors:['#185FA5','#3B6D11','#534AB7']},
+     rk:[{c:'#3b5998',l:'META(사용자정의)',v:pct(meCvr2),s:'결제수/유입수'},{c:'#185FA5',l:'성과형디스플레이',v:pct(gCvr2),s:'결제수/유입수'},{c:'#3B6D11',l:'검색광고',v:pct(saCvr2),s:'결제수/유입수'},{c:'#854F0B',l:'브랜드검색',v:sum(mkt_brand,mkIn)>0?pct(sum(mkt_brand,mkOrd)/sum(mkt_brand,mkIn)):'—',s:'결제수/유입수'}],
+     ll:[{c:'#3b5998',l:'META CVR'},{c:'#185FA5',l:'GFA CVR'},{c:'#3B6D11',l:'SA CVR'},{c:'#854F0B',l:'BSA CVR'}],
+     rl:[{c:'#3b5998',l:'META(사용자정의)'},{c:'#185FA5',l:'성과형디스플레이'},{c:'#3B6D11',l:'검색광고'},{c:'#854F0B',l:'브랜드검색'}],
+     lch:{labels:['META','GFA','SA','BSA'],data:[meT.cvr,gT.cvr,saT.cvr,0],colors:['#3b5998','#185FA5','#3B6D11','#854F0B']},
+     rch:{labels:['META','성과형','검색광고','브랜드검색'],data:[meCvr2*100,gCvr2*100,saCvr2*100,sum(mkt_brand,mkIn)>0?sum(mkt_brand,mkOrd)/sum(mkt_brand,mkIn)*100:0],colors:['#3b5998','#185FA5','#3B6D11','#854F0B']},
      ln:'* CVR = 전환수 / 클릭수 (매체 플랫폼 기준)',rn:'* 결제율 = 결제수(마지막클릭) / 유입수 (스마트스토어 통계)',
-     th:['매체','CVR(플랫폼)','결제율(통계)','비고'],
-     tr:[['<span class="badge bme">META</span>',meT.cvr+'%',pct(meCvr2),'사용자정의 채널'],['<span class="badge bgf">GFA</span>',gT.cvr+'%',pct(gCvr2),''],['<span class="badge bsa">SA</span>',saT.cvr+'%',pct(saCvr2),'검색광고 근사'],['<span class="badge bbs">BSA</span>','—','—','연동 예정']],
+     th:['매체','CVR(플랫폼)','통계 채널','결제율(통계)','비고'],
+     tr:[
+       ['<span class="badge bme">META</span>',meT.cvr+'%','사용자정의',pct(meCvr2),''],
+       ['<span class="badge bgf">GFA</span>',gT.cvr+'%','성과형디스플레이',pct(gCvr2),'플랫폼 CVR은 CTR 기준'],
+       ['<span class="badge bsa">SA</span>',saT.cvr+'%','검색광고(쇼핑+사이트)',pct(saCvr2),''],
+       ['<span class="badge bbs">BSA</span>','—','브랜드검색(일반형)',sum(mkt_brand,mkIn)>0?pct(sum(mkt_brand,mkOrd)/sum(mkt_brand,mkIn)):'—','BSA CVR 연동 예정'],
+     ],
      tn:'* CVR(클릭→전환)과 결제율(유입→결제)은 분모·분자 정의 달라 직접 비교 주의',
      ins:[{t:'d',tx:`<b>GFA CVR(${gT.cvr}%) vs 결제율(${pct(gCvr2)})</b> — 차이가 크면 간접 전환(뷰스루 등) 포함`},{t:'o',tx:`<b>SA CVR(${saT.cvr}%) vs 결제율(${pct(saCvr2)})</b> — 검색광고 특성상 의도 기반 클릭 비중 높음`}]}
   ];
 
   window._tabs=tabs;
   setTab(curTab,true);
+  renderChChart();
 }
 
 const bOpt={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10},maxRotation:20,autoSkip:false},grid:{display:false}},y:{ticks:{font:{size:10}},grid:{color:'rgba(0,0,0,0.05)'}}}};
@@ -476,6 +516,100 @@ function setTab(i,skipTabHighlight){
   lC=new Chart(document.getElementById('lc'),{type:'bar',data:{labels:t.lch.labels,datasets:[{data:t.lch.data,backgroundColor:t.lch.colors,borderRadius:4}]},options:o1});
   rC=new Chart(document.getElementById('rc'),{type:'bar',data:{labels:t.rch.labels,datasets:[{data:t.rch.data,backgroundColor:t.rch.colors,borderRadius:4}]},options:o2});
   if(!skipTabHighlight)document.querySelectorAll('.mtab').forEach((el,idx)=>el.classList.toggle('on',idx===i));
+}
+
+
+let chChart = null;
+const CH_COLORS = [
+  '#185FA5','#3B6D11','#534AB7','#854F0B','#A32D2D',
+  '#1D9E75','#BA7517','#3b5998','#639922','#0F6E56',
+  '#3C3489','#993C1D','#993556','#5F5E5A','#185FA5',
+  '#378ADD','#5DCAA5','#7F77DD','#EF9F27','#E24B4A'
+];
+
+function renderChChart(){
+  if(!COLS.ready||!RAW.mkt.length)return;
+  const {mkName,mkCust,mkIn,mkRl,mkR14,mkOrd,mkDateC}=COLS;
+  const metric=document.getElementById('ch-metric').value;
+  const from=curFrom,to=curTo;
+  const mkt=filterByDate(RAW.mkt,mkDateC,from,to);
+  const nrm=s=>(s||'').toString().trim();
+
+  // 채널명별 집계
+  const chMap={};
+  mkt.forEach(r=>{
+    const ch=nrm(r[mkName]);
+    if(!ch)return;
+    if(!chMap[ch])chMap[ch]={cust:0,in:0,ord_lc:0,rev_lc:0,ord_14:0,rev_14:0};
+    chMap[ch].cust   +=num(r[mkCust]);
+    chMap[ch].in     +=num(r[mkIn]);
+    chMap[ch].ord_lc +=num(r[mkOrd]);
+    chMap[ch].rev_lc +=num(r[mkRl]);
+    // +14일 컬럼
+    const ord14Col = Object.keys(r).find(k=>k.includes('결제수')&&k.includes('14'));
+    const rev14Col = Object.keys(r).find(k=>k.includes('결제금액')&&k.includes('14'));
+    chMap[ch].ord_14 +=ord14Col?num(r[ord14Col]):0;
+    chMap[ch].rev_14 +=rev14Col?num(r[rev14Col]):0;
+  });
+
+  // 값 기준 내림차순 정렬, 0인 채널 제외
+  const sorted=Object.entries(chMap)
+    .filter(([,v])=>v[metric]>0)
+    .sort((a,b)=>b[1][metric]-a[1][metric]);
+
+  const labels=sorted.map(([k])=>k);
+  const data=sorted.map(([,v])=>v[metric]);
+  const colors=labels.map((_,i)=>CH_COLORS[i%CH_COLORS.length]);
+
+  const metricLabels={
+    cust:'고객수',in:'유입수',
+    ord_lc:'결제수 (마지막클릭)',rev_lc:'결제금액 (마지막클릭)',
+    ord_14:'결제수 (+14일)',rev_14:'결제금액 (+14일)'
+  };
+  const isWon=metric==='rev_lc'||metric==='rev_14';
+  const isCount=metric==='cust'||metric==='in'||metric==='ord_lc'||metric==='ord_14';
+
+  if(chChart){chChart.destroy();chChart=null;}
+  const ctx=document.getElementById('chChart');
+  if(!ctx)return;
+
+  chChart=new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[{
+        label:metricLabels[metric],
+        data,
+        backgroundColor:colors,
+        borderRadius:4,
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      indexAxis:'x',
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          label:c=>{
+            const v=c.raw;
+            if(isWon)return metricLabels[metric]+': ₩'+Math.round(v).toLocaleString();
+            return metricLabels[metric]+': '+Math.round(v).toLocaleString();
+          }
+        }}
+      },
+      scales:{
+        x:{ticks:{font:{size:10},maxRotation:30,autoSkip:false},grid:{display:false}},
+        y:{ticks:{font:{size:10},callback:v=>isWon?'₩'+Math.round(v/1000)+'K':Math.round(v).toLocaleString()},grid:{color:'rgba(0,0,0,0.05)'}}
+      }
+    }
+  });
+
+  // 범례
+  const leg=document.getElementById('ch-leg');
+  if(leg)leg.innerHTML=labels.slice(0,10).map((l,i)=>`<span class="li"><span class="ls" style="background:${colors[i]}"></span>${l}</span>`).join('');
+  const note=document.getElementById('ch-note');
+  if(note)note.textContent=`* ${metricLabels[metric]} 기준 채널명별 합산 / ${from||'전체'} ~ ${to||'전체'} / ${isWon?'단위: 원':'단위: 건'}`;
 }
 
 async function loadAll(){
@@ -522,7 +656,7 @@ async function loadAll(){
       meRoas:fc(mC,'구매 ROAS','ROAS'), meCvr:fc(mC,'전환 구매','전환율','CVR'),
       meCost:fc(mC,'지출 금액','비용','총비용','광고비','Cost'),
       // 스토어 마케팅 컬럼
-      mkGrp:fc(mkC,'채널그룹','채널 그룹'), mkName:fc(mkC,'채널명','채널 이름'),
+      mkGrp:fc(mkC,'채널그룹','채널 그룹'), mkName:fc(mkC,'채널명','채널 이름'), mkCust:fc(mkC,'고객수','고객 수','customers'),
       mkDet:fc(mkC,'채널상세','채널 상세'), mkIn:fc(mkC,'유입수','방문수','세션수'),
       mkRl:fc(mkC,'결제금액(마지막클릭)','결제금액','구매금액','매출'),
       mkR14:fc(mkC,'결제금액(+14일기여도추정)','결제금액(14일)'),
