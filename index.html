@@ -489,7 +489,7 @@ function renderMemoPanel(campaign, adgroup, colSpan) {
 
   var memosHtml = '';
   memos.forEach(function(m){
-    var dtEsc = (m.datetime || '').replace(/'/g, "\'");
+    var rowIdEsc = (m.rowId || m.datetime || '').replace(/'/g, "\'");
     var campEsc = campaign.replace(/'/g, "\'");
     var grpEsc = adgroup.replace(/'/g, "\'");
     memosHtml += '<div style="background:white;border:1px solid #dbeafe;border-radius:6px;padding:10px 12px;margin-bottom:8px">';
@@ -500,7 +500,7 @@ function renderMemoPanel(campaign, adgroup, colSpan) {
       memosHtml += '<span style="font-size:11px;color:#6b7280;background:#f3f4f6;padding:1px 6px;border-radius:3px">' + (m.author || '') + '</span>';
     }
     memosHtml += '</div>';
-    memosHtml += '<span style="font-size:11px;color:#9ca3af;cursor:pointer" onclick="deleteMemo(\'' + campEsc + '\',\'' + grpEsc + '\',\'' + dtEsc + '\',event)">삭제</span>';
+    memosHtml += '<span style="font-size:11px;color:#9ca3af;cursor:pointer" onclick="deleteMemo(\'' + campEsc + '\',\'' + grpEsc + '\',\'' + rowIdEsc + '\',event)">삭제</span>';
     memosHtml += '</div>';
     memosHtml += '<p style="margin:0;font-size:12px;color:#1f2937;line-height:1.6;white-space:pre-wrap">' + (m.memo || '').replace(/</g,'&lt;') + '</p>';
     memosHtml += '</div>';
