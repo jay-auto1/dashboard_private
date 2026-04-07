@@ -347,7 +347,7 @@ var RAW = {
 };
 
 // ── 메모 기능 ────────────────────────────────────────────────────────────────
-var MEMO_API_URL = 'https://script.google.com/macros/s/AKfycbx-9BCHIjcdxujHN_EW1q8IP-pSKodqf3WMUBTnA0zVfXyNsdq4Zlkpwm2xRAL9iZ1KNA/exec';
+var MEMO_API_URL = 'https://script.google.com/macros/s/AKfycbxqrTOmlkux6FTLvGbo_NV3ivIB3rI9rR-5ji_tOEpNAUx_iap3J8p7589BgX2My_6IXQ/exec';
 var memoData = {};
 var memoLoaded = false;
 var activeMemoKey = null;
@@ -436,7 +436,7 @@ function saveMemo(campaign, adgroup) {
   .then(function(res){
     if (res.result === 'ok') {
       if (!memoData[key]) memoData[key] = [];
-      memoData[key].push({campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:author});
+      memoData[key].push({campaign:campaign, adgroup:adgroup, memo:memoText, datetime:dt, author:author, rowId:res.rowId});
       ta.value = '';
       renderCampaignTable();
     } else {
@@ -450,21 +450,21 @@ function saveMemo(campaign, adgroup) {
   });
 }
 
-function deleteMemo(campaign, adgroup, datetime, event) {
+function deleteMemo(campaign, adgroup, rowId, event) {
   if (event) event.stopPropagation();
   if (!confirm('이 메모를 삭제할까요?')) return;
   var key = campaign + '__' + adgroup;
 
   fetch(MEMO_API_URL, {
     method: 'POST',
-    body: JSON.stringify({action:'delete', campaign:campaign, adgroup:adgroup, datetime:datetime}),
+    body: JSON.stringify({action:'delete', rowId:rowId}),
     headers: {'Content-Type': 'text/plain'}
   })
   .then(function(r){ return r.json(); })
   .then(function(res){
     if (res.result === 'ok') {
       if (memoData[key]) {
-        memoData[key] = memoData[key].filter(function(m){ return m.datetime !== datetime; });
+        memoData[key] = memoData[key].filter(function(m){ return m.rowId !== rowId; });
       }
       renderCampaignTable();
     }
@@ -495,7 +495,7 @@ function renderMemoPanel(campaign, adgroup, colSpan) {
     memosHtml += '<div style="background:white;border:1px solid #dbeafe;border-radius:6px;padding:10px 12px;margin-bottom:8px">';
     memosHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">';
     memosHtml += '<div style="display:flex;align-items:center;gap:8px">';
-    memosHtml += '<span style="font-size:11px;color:#3b82f6;font-weight:600">' + (m.datetime || '').slice(0,10) + '</span>';
+    memosHtml += '<span style="font-size:11px;color:#3b82f6;font-weight:600">' + (m.datetime || '') + '</span>';
     if (m.author) {
       memosHtml += '<span style="font-size:11px;color:#6b7280;background:#f3f4f6;padding:1px 6px;border-radius:3px">' + (m.author || '') + '</span>';
     }
