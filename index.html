@@ -347,7 +347,7 @@ var RAW = {
 };
 
 // ── 메모 기능 ────────────────────────────────────────────────────────────────
-var MEMO_API_URL = 'https://script.google.com/macros/s/AKfycbxqrTOmlkux6FTLvGbo_NV3ivIB3rI9rR-5ji_tOEpNAUx_iap3J8p7589BgX2My_6IXQ/exec';
+var MEMO_API_URL = 'https://script.google.com/macros/s/AKfycbwGTBTQPkyYJLkPvFNF4mAWUaoAm1xSYos8CgxXYQXMtM75YNINjE6YxjH_WpURuTiaWw/exec';
 var memoData = {};
 var memoLoaded = false;
 var activeMemoKey = null;
@@ -399,7 +399,7 @@ function getMemoCount(campaign, adgroup) {
 function getNowDatetime() {
   var now = new Date();
   var pad = function(n){ return n < 10 ? '0' + n : n; };
-  return now.getFullYear() + '.' + pad(now.getMonth()+1) + '.' + pad(now.getDate()) + ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+  return now.getFullYear() + '.' + pad(now.getMonth()+1) + '.' + pad(now.getDate());
 }
 
 function toggleMemoPanel(campaign, adgroup, event) {
